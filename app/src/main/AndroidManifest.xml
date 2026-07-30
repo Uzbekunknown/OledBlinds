@@ -8,6 +8,10 @@
          leaves the service running with no way for the user to see or reach it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <permission
+        android:name="com.catly.letterboxer.permission.APP_ACTION"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.catly.letterboxer.permission.APP_ACTION" />
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -78,7 +82,8 @@
 
         <receiver
             android:name="com.catly.letterboxer.AppActionReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:permission="com.catly.letterboxer.permission.APP_ACTION">
             <intent-filter>
                 <action android:name="com.catly.letterboxer.APP_ACTION"/>
             </intent-filter>

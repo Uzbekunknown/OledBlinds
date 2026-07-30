@@ -1,5 +1,6 @@
 package com.catly.letterboxer.floating_window
 
+import android.util.Log
 import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
 import android.content.Context
@@ -44,6 +45,7 @@ class AppWatcherService : AccessibilityService() {
     }
 
     companion object {
+        private const val TAG = "AppWatcherService"
         const val PREF_KEY = "autoTikTok"
         const val WATCHED_PACKAGES_KEY = "watchedPackages"
 
@@ -145,6 +147,7 @@ class AppWatcherService : AccessibilityService() {
         try {
             FloatingWindowService.startService(this, byWatcher = true)
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to start FloatingWindowService from AppWatcher", e)
             FloatingWindowService.setStartedByWatcher(this, false)
         }
     }

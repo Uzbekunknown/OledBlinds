@@ -1,3 +1,13 @@
+[Version 6.69]
+
+Added:
+- Security permission protection for AppActionReceiver (signature protection level)
+- Detailed exception logging in AppWatcherService for foreground service diagnostics
+
+Changed:
+- Improved app text strings and prompt clarity
+- Enhanced resilience against silent service startup failures
+
 [Version 6.67]
 
 Added:
