@@ -42,10 +42,14 @@ class AppWatcherService : AccessibilityService() {
     }
 
     private fun stopBarsImmediately() {
-        if (FloatingWindowService.isRunning &&
-            FloatingWindowService.startedByWatcher
-        ) {
-            FloatingWindowService.stopService(this)
+        try {
+            if (FloatingWindowService.isRunning &&
+                FloatingWindowService.startedByWatcher
+            ) {
+                FloatingWindowService.stopService(this)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping FloatingWindowService", e)
         }
     }
 
@@ -119,8 +123,12 @@ class AppWatcherService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
-        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
-        sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceListener)
+        try {
+            sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
+            sharedPreferences.registerOnSharedPreferenceChangeListener(preferenceListener)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing sharedPreferences in onCreate", e)
+        }
     }
 
     override fun onServiceConnected() {
@@ -128,29 +136,37 @@ class AppWatcherService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        val type = event?.eventType ?: return
-        if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
+        try {
+            val type = event?.eventType ?: return
+            if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+                type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
 
-        val eventPackage = event.packageName?.toString() ?: return
-        if (eventPackage == packageName) return
-        if (eventPackage in OVERLAY_PACKAGES) return
-        if (eventPackage == currentInputMethodPackage()) return
+            val eventPackage = event.packageName?.toString() ?: return
+            if (eventPackage == packageName) return
+            if (eventPackage in OVERLAY_PACKAGES) return
+            if (eventPackage == currentInputMethodPackage()) return
 
-        if (!sharedPreferences.getBoolean(PREF_KEY, false)) return
-
-        val isWatched = eventPackage in watchedPackages(sharedPreferences, this)
-
-        if (isWatched) {
-            handler.removeCallbacks(stopBarsRunnable)
-            isStopPending = false
-            startBars()
-        } else {
-            // Only schedule stop if not already pending to prevent window flicker
-            if (!isStopPending) {
-                isStopPending = true
-                handler.postDelayed(stopBarsRunnable, LEAVE_DELAY_MS)
+            if (!::sharedPreferences.isInitialized) {
+                sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
             }
+
+            if (!sharedPreferences.getBoolean(PREF_KEY, false)) return
+
+            val isWatched = eventPackage in watchedPackages(sharedPreferences, this)
+
+            if (isWatched) {
+                handler.removeCallbacks(stopBarsRunnable)
+                isStopPending = false
+                startBars()
+            } else {
+                // Only schedule stop if not already pending to prevent window flicker
+                if (!isStopPending) {
+                    isStopPending = true
+                    handler.postDelayed(stopBarsRunnable, LEAVE_DELAY_MS)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onAccessibilityEvent", e)
         }
     }
 
@@ -168,6 +184,12 @@ class AppWatcherService : AccessibilityService() {
     override fun onInterrupt() {
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        handler.removeCallbacks(stopBarsRunnable)
+        isStopPending = false
+    }
+
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacks(stopBarsRunnable)
         isStopPending = false
@@ -180,13 +202,23 @@ class AppWatcherService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+        try {
+            if (::sharedPreferences.isInitialized) {
+                sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering preferenceListener in onDestroy", e)
+        }
         handler.removeCallbacks(stopBarsRunnable)
         isStopPending = false
     }
 
     /** Stored as a flattened component, e.g. `com.example.ime/.InputService`. */
     private fun currentInputMethodPackage(): String? =
-        Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
-            ?.let { ComponentName.unflattenFromString(it)?.packageName }
+        try {
+            Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+                ?.let { ComponentName.unflattenFromString(it)?.packageName }
+        } catch (e: Exception) {
+            null
+        }
 }
