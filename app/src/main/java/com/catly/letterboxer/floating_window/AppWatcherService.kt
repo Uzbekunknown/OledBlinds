@@ -25,22 +25,27 @@ class AppWatcherService : AccessibilityService() {
 
     private lateinit var sharedPreferences: SharedPreferences
     private val handler = Handler(Looper.getMainLooper())
+    private var isStopPending = false
 
     private val preferenceListener =
         SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
             if (key == PREF_KEY && !preferences.getBoolean(key, false)) {
                 handler.removeCallbacks(stopBarsRunnable)
-                if (FloatingWindowService.isRunning && FloatingWindowService.startedByWatcher) {
-                    FloatingWindowService.stopService(this)
-                    FloatingWindowService.setStartedByWatcher(this, false)
-                }
+                isStopPending = false
+                stopBarsImmediately()
             }
         }
 
     private val stopBarsRunnable = Runnable {
-        if (FloatingWindowService.isRunning && FloatingWindowService.startedByWatcher) {
+        isStopPending = false
+        stopBarsImmediately()
+    }
+
+    private fun stopBarsImmediately() {
+        if (FloatingWindowService.isRunning &&
+            FloatingWindowService.startedByWatcher
+        ) {
             FloatingWindowService.stopService(this)
-            FloatingWindowService.setStartedByWatcher(this, false)
         }
     }
 
@@ -60,19 +65,23 @@ class AppWatcherService : AccessibilityService() {
 
         /**
          * Windows that are drawn over the current app instead of replacing it. Treating them as an
-         * app switch would drop the bars every time the notification shade is pulled down.
+         * app switch would drop the bars every time a system overlay, permission, or dialog appears.
          */
         private val OVERLAY_PACKAGES = setOf(
             "com.android.systemui",
-            "android"
+            "android",
+            "com.google.android.permissioncontroller",
+            "com.android.permissioncontroller",
+            "com.google.android.packageinstaller",
+            "com.android.packageinstaller",
+            "com.google.android.gms"
         )
 
         /**
-         * Leaving a watched app is applied with a delay so that a window that only flashes past --
-         * the launcher during a gesture, a permission dialog, a share sheet -- does not toggle the
-         * bars off and straight back on.
+         * Leaving a watched app is applied with a delay so that window transitions, splash screens,
+         * and system dialogs during app startup do not falsely turn off the overlay.
          */
-        private const val LEAVE_DELAY_MS = 500L
+        private const val LEAVE_DELAY_MS = 1200L
 
         /**
          * Returns only the watched packages that are actually installed on the user's device when
@@ -134,10 +143,14 @@ class AppWatcherService : AccessibilityService() {
 
         if (isWatched) {
             handler.removeCallbacks(stopBarsRunnable)
+            isStopPending = false
             startBars()
         } else {
-            handler.removeCallbacks(stopBarsRunnable)
-            handler.postDelayed(stopBarsRunnable, LEAVE_DELAY_MS)
+            // Only schedule stop if not already pending to prevent window flicker
+            if (!isStopPending) {
+                isStopPending = true
+                handler.postDelayed(stopBarsRunnable, LEAVE_DELAY_MS)
+            }
         }
     }
 
@@ -157,6 +170,7 @@ class AppWatcherService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacks(stopBarsRunnable)
+        isStopPending = false
         return true
     }
 
@@ -168,6 +182,7 @@ class AppWatcherService : AccessibilityService() {
         super.onDestroy()
         sharedPreferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
         handler.removeCallbacks(stopBarsRunnable)
+        isStopPending = false
     }
 
     /** Stored as a flattened component, e.g. `com.example.ime/.InputService`. */
